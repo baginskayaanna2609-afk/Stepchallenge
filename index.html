@@ -384,7 +384,6 @@
 const SHEET_URL = 'https://script.google.com/macros/s/AKfycbxNUDH1RNTOyUU5bE0cvi4EAgWfhjgDJbi0cApgsJdEu2TtPKa3G1_JbJJayP-I8bMh/exec';
 const SHEET_GET_URL = '/.netlify/functions/ratings';
 let fileData = null;
-let localEntries = [];
 
 function switchTab(tab, btn) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
@@ -430,7 +429,7 @@ async function submitEntry() {
   const mediaType = fileData.split(';')[0].split(':')[1];
   const today = new Date().toLocaleDateString('ru-RU');
 
-  let aiSteps = null, note = '', badgeClass = 'badge-pend', badgeText = 'На проверке', verifyStatus = 'pending';
+  let aiSteps = null, note = '', badgeClass = 'badge-pend', badgeText = 'Расхождение', verifyStatus = 'error';
 
   try {
     const resp = await fetch('/.netlify/functions/verify', {
@@ -441,14 +440,21 @@ async function submitEntry() {
     const result = await resp.json();
     aiSteps = result.ai_steps || null;
     note = result.note || '';
-    const rawStatus = result.status || 'На проверке';
+    const rawStatus = result.status || 'Расхождение';
 
-    if (rawStatus === 'Подтверждено') { verifyStatus = 'ok'; badgeClass = 'badge-ok'; badgeText = 'Подтверждено ✓'; }
-    else if (rawStatus === 'Небольшое расхождение') { verifyStatus = 'warn'; badgeClass = 'badge-warn'; badgeText = rawStatus; }
-    else if (rawStatus === 'Расхождение!') { verifyStatus = 'error'; badgeClass = 'badge-err'; badgeText = rawStatus; }
-    else { badgeText = rawStatus; }
+    if (rawStatus === 'Подтверждено') {
+      verifyStatus = 'ok';
+      badgeClass = 'badge-ok';
+      badgeText = 'Подтверждено ✓';
+    } else {
+      verifyStatus = 'error';
+      badgeClass = 'badge-err';
+      badgeText = 'Расхождение';
+    }
   } catch(err) {
     note = 'Ошибка проверки';
+    badgeClass = 'badge-err';
+    badgeText = 'Расхождение';
   }
 
   const diff = aiSteps !== null ? Math.abs(aiSteps - stepsEntered) : null;
@@ -474,13 +480,11 @@ async function submitEntry() {
     });
   } catch(err) {}
 
-  localEntries = localEntries.filter(e => !(e.name === name && e.date === today));
-  localEntries.push({ name, email, steps: stepsEntered, status: badgeText, date: today, badgeClass, verifyStatus });
-
-  if (verifyStatus === 'ok') showMsg('✅ Готово! Шаги сохранены.', 'green');
-  else if (verifyStatus === 'warn') showMsg('✅ Сохранено. Небольшое расхождение — всё ок.', 'amber');
-  else if (verifyStatus === 'error') showMsg('⚠️ Сохранено. Администратор проверит расхождение.', 'amber');
-  else showMsg('✅ Отправлено на проверку.', 'blue');
+  if (verifyStatus === 'ok') {
+    showMsg('✅ Подтверждено! Шаги добавлены в рейтинг.', 'green');
+  } else {
+    showMsg('⚠️ Расхождение — данные отправлены на ручную проверку администратору.', 'amber');
+  }
 
   btn.disabled = false;
 }
@@ -506,43 +510,36 @@ async function loadLeaderboard() {
 }
 
 function renderLeaderboard(today, overall) {
-  const medals = ['🥇','🥈','🥉'];
+  const medals = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
 
-  // Метрики за сегодня
   const todaySum = today.reduce((a,b) => a + b.steps, 0);
   document.getElementById('mParticipants').textContent = today.length || '—';
   document.getElementById('mTotal').textContent = todaySum ? (todaySum/1000).toFixed(0)+'k' : '—';
   document.getElementById('mAvg').textContent = today.length ? Math.round(todaySum/today.length).toLocaleString() : '—';
 
   const list = document.getElementById('rankingList');
-
-  // Рейтинг за сегодня
   let html = '<div style="font-size:13px;font-weight:500;color:var(--gray-400);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.05em;">За сегодня</div>';
+
   if (today.length) {
-    html += today.slice(0,20).map((e,i) => {
-      const initials = e.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
-      const badgeClass = e.status === 'Подтверждено ✓' ? 'badge-ok' : e.status === 'Расхождение!' ? 'badge-err' : 'badge-pend';
+    html += today.slice(0,50).map((e,i) => {
       return '<div class="rank-row">' +
-        '<div class="rank-num">' + (i < 3 ? medals[i] : (i+1)) + '</div>' +
-        '<div class="avatar">' + initials + '</div>' +
-        '<div class="rank-info"><div class="rank-name">' + e.name + '</div><div class="rank-email">' + (e.email||'') + '</div></div>' +
-        '<div><div class="rank-steps">' + e.steps.toLocaleString() + '</div><div class="rank-badge"><span class="badge ' + badgeClass + '" style="font-size:11px;">' + (e.status||'') + '</span></div></div>' +
+        '<div class="rank-num" style="width:32px;font-size:' + (i < 10 ? '18' : '13') + 'px;">' + (i < 10 ? medals[i] : (i+1)) + '</div>' +
+        '<div class="rank-info"><div class="rank-name" style="font-size:15px;">' + e.name + '</div></div>' +
+        '<div><div class="rank-steps">' + e.steps.toLocaleString() + '</div></div>' +
       '</div>';
     }).join('');
   } else {
     html += '<div style="text-align:center;color:var(--gray-400);padding:1rem;font-size:14px;">Сегодня ещё никто не отправил шаги</div>';
   }
 
-  // Общий рейтинг
   html += '<div style="font-size:13px;font-weight:500;color:var(--gray-400);margin:20px 0 12px;text-transform:uppercase;letter-spacing:0.05em;">Общий рейтинг</div>';
+
   if (overall.length) {
-    html += overall.slice(0,20).map((e,i) => {
-      const initials = e.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    html += overall.slice(0,50).map((e,i) => {
       return '<div class="rank-row">' +
-        '<div class="rank-num">' + (i < 3 ? medals[i] : (i+1)) + '</div>' +
-        '<div class="avatar">' + initials + '</div>' +
-        '<div class="rank-info"><div class="rank-name">' + e.name + '</div><div class="rank-email">' + (e.email||'') + '</div></div>' +
-        '<div><div class="rank-steps">' + e.total.toLocaleString() + '</div><div class="rank-badge" style="font-size:11px;color:var(--gray-400);">' + e.days + ' ' + (e.days === 1 ? 'день' : e.days < 5 ? 'дня' : 'дней') + '</div></div>' +
+        '<div class="rank-num" style="width:32px;font-size:' + (i < 10 ? '18' : '13') + 'px;">' + (i < 10 ? medals[i] : (i+1)) + '</div>' +
+        '<div class="rank-info"><div class="rank-name" style="font-size:15px;">' + e.name + '</div></div>' +
+        '<div><div class="rank-steps">' + e.total.toLocaleString() + '</div><div style="font-size:11px;color:var(--gray-400);">' + e.days + ' ' + (e.days === 1 ? 'день' : e.days < 5 ? 'дня' : 'дней') + '</div></div>' +
       '</div>';
     }).join('');
   } else {

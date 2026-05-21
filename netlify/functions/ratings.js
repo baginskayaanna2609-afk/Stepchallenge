@@ -1,6 +1,6 @@
 exports.handler = async function(event) {
   try {
-    const response = await fetch('https://script.google.com/macros/s/AKfycbzmQswGCWHiMtInEcmWvE3L6YNEDJBey3UxQ62xF1Pdv5TkZHu7bA8V2s0CD9r7bYFVxQ/exec%27);
+    const response = await fetch('https://script.google.com/macros/s/AKfycbwnPa672aMlwmDPjw7cUW2cZKH5ZM4-D0VifT9UAGoAXOzYCA2uSd666BmRtQtO2e1IUQ/exec%27);
     const data = await response.json();
     return {
       statusCode: 200,

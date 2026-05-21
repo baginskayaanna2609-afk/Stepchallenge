@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Step Challenge 2025</title>
+<title>Step Challenge 2026</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -313,7 +313,7 @@
 <div class="container">
   <header>
     <div class="logo">🚶</div>
-    <h1>Step Challenge 2025</h1>
+    <h1>Step Challenge 2026</h1>
     <p class="subtitle">Отправь шаги — ИИ проверит скриншот автоматически</p>
   </header>
 
@@ -382,6 +382,7 @@
 
 <script>
 const SHEET_URL = 'https://script.google.com/macros/s/AKfycbxNUDH1RNTOyUU5bE0cvi4EAgWfhjgDJbi0cApgsJdEu2TtPKa3G1_JbJJayP-I8bMh/exec';
+const SHEET_GET_URL = 'https://script.google.com/macros/s/AKfycbzmQswGCWHiMtInEcmWvE3L6YNEDJBey3UxQ62xF1Pdv5TkZHu7bA8V2s0CD9r7bYFVxQ/exec';
 let fileData = null;
 let localEntries = [];
 
@@ -390,7 +391,7 @@ function switchTab(tab, btn) {
   document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
   document.getElementById(tab).classList.add('active');
   btn.classList.add('active');
-  if (tab === 'leaderboard') renderLeaderboard();
+  if (tab === 'leaderboard') loadLeaderboard();
 }
 
 function handleFile(input) {
@@ -475,7 +476,6 @@ async function submitEntry() {
 
   localEntries = localEntries.filter(e => !(e.name === name && e.date === today));
   localEntries.push({ name, email, steps: stepsEntered, status: badgeText, date: today, badgeClass, verifyStatus });
-  localEntries.sort((a,b) => b.steps - a.steps);
 
   if (verifyStatus === 'ok') showMsg('✅ Готово! Шаги сохранены.', 'green');
   else if (verifyStatus === 'warn') showMsg('✅ Сохранено. Небольшое расхождение — всё ок.', 'amber');
@@ -492,29 +492,64 @@ function showMsg(text, color) {
   el.textContent = text;
 }
 
-function renderLeaderboard() {
-  const entries = localEntries;
-  if (!entries.length) {
-    document.getElementById('mParticipants').textContent = '—';
-    document.getElementById('mTotal').textContent = '—';
-    document.getElementById('mAvg').textContent = '—';
-    document.getElementById('rankingList').innerHTML = '<div class="empty"><div class="empty-icon">🏆</div>Рейтинг появится после первых отправок сегодня</div>';
-    return;
+async function loadLeaderboard() {
+  const list = document.getElementById('rankingList');
+  list.innerHTML = '<div class="empty"><div class="empty-icon">⏳</div>Загружаем данные...</div>';
+
+  try {
+    const resp = await fetch(SHEET_GET_URL);
+    const data = await resp.json();
+    renderLeaderboard(data.today || [], data.overall || []);
+  } catch(err) {
+    list.innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div>Не удалось загрузить данные</div>';
   }
-  const sum = entries.reduce((a,b) => a + b.steps, 0);
-  document.getElementById('mParticipants').textContent = entries.length;
-  document.getElementById('mTotal').textContent = (sum / 1000).toFixed(0) + 'k';
-  document.getElementById('mAvg').textContent = Math.round(sum / entries.length).toLocaleString();
+}
+
+function renderLeaderboard(today, overall) {
   const medals = ['🥇','🥈','🥉'];
-  document.getElementById('rankingList').innerHTML = entries.map((e,i) => {
-    const initials = e.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
-    return '<div class="rank-row">' +
-      '<div class="rank-num">' + (i < 3 ? medals[i] : (i+1)) + '</div>' +
-      '<div class="avatar">' + initials + '</div>' +
-      '<div class="rank-info"><div class="rank-name">' + e.name + '</div><div class="rank-email">' + (e.email||'') + '</div></div>' +
-      '<div><div class="rank-steps">' + e.steps.toLocaleString() + '</div><div class="rank-badge"><span class="badge ' + e.badgeClass + '" style="font-size:11px;">' + e.status + '</span></div></div>' +
-    '</div>';
-  }).join('');
+
+  // Метрики за сегодня
+  const todaySum = today.reduce((a,b) => a + b.steps, 0);
+  document.getElementById('mParticipants').textContent = today.length || '—';
+  document.getElementById('mTotal').textContent = todaySum ? (todaySum/1000).toFixed(0)+'k' : '—';
+  document.getElementById('mAvg').textContent = today.length ? Math.round(todaySum/today.length).toLocaleString() : '—';
+
+  const list = document.getElementById('rankingList');
+
+  // Рейтинг за сегодня
+  let html = '<div style="font-size:13px;font-weight:500;color:var(--gray-400);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.05em;">За сегодня</div>';
+  if (today.length) {
+    html += today.slice(0,20).map((e,i) => {
+      const initials = e.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+      const badgeClass = e.status === 'Подтверждено ✓' ? 'badge-ok' : e.status === 'Расхождение!' ? 'badge-err' : 'badge-pend';
+      return '<div class="rank-row">' +
+        '<div class="rank-num">' + (i < 3 ? medals[i] : (i+1)) + '</div>' +
+        '<div class="avatar">' + initials + '</div>' +
+        '<div class="rank-info"><div class="rank-name">' + e.name + '</div><div class="rank-email">' + (e.email||'') + '</div></div>' +
+        '<div><div class="rank-steps">' + e.steps.toLocaleString() + '</div><div class="rank-badge"><span class="badge ' + badgeClass + '" style="font-size:11px;">' + (e.status||'') + '</span></div></div>' +
+      '</div>';
+    }).join('');
+  } else {
+    html += '<div style="text-align:center;color:var(--gray-400);padding:1rem;font-size:14px;">Сегодня ещё никто не отправил шаги</div>';
+  }
+
+  // Общий рейтинг
+  html += '<div style="font-size:13px;font-weight:500;color:var(--gray-400);margin:20px 0 12px;text-transform:uppercase;letter-spacing:0.05em;">Общий рейтинг</div>';
+  if (overall.length) {
+    html += overall.slice(0,20).map((e,i) => {
+      const initials = e.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+      return '<div class="rank-row">' +
+        '<div class="rank-num">' + (i < 3 ? medals[i] : (i+1)) + '</div>' +
+        '<div class="avatar">' + initials + '</div>' +
+        '<div class="rank-info"><div class="rank-name">' + e.name + '</div><div class="rank-email">' + (e.email||'') + '</div></div>' +
+        '<div><div class="rank-steps">' + e.total.toLocaleString() + '</div><div class="rank-badge" style="font-size:11px;color:var(--gray-400);">' + e.days + ' ' + (e.days === 1 ? 'день' : e.days < 5 ? 'дня' : 'дней') + '</div></div>' +
+      '</div>';
+    }).join('');
+  } else {
+    html += '<div style="text-align:center;color:var(--gray-400);padding:1rem;font-size:14px;">Нет данных</div>';
+  }
+
+  list.innerHTML = html;
 }
 </script>
 </body>
